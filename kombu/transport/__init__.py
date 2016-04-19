@@ -59,7 +59,7 @@ TRANSPORT_ALIASES = {
     'sqla': 'kombu.transport.sqlalchemy:Transport',
     'SLMQ': 'kombu.transport.SLMQ.Transport',
     'slmq': 'kombu.transport.SLMQ.Transport',
-    'stomp': 'kombu.transport.stomp_rabbitmq.Transport',
+    'stomp': 'kombu.transport.stomp_rabbitmq:Transport',
     'ghettoq.taproot.Redis': _ghettoq('Redis', 'redis', 'redis'),
     'ghettoq.taproot.Database': _ghettoq('Database', 'django', 'django'),
     'ghettoq.taproot.MongoDB': _ghettoq('MongoDB', 'mongodb'),
