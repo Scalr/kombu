@@ -8,7 +8,7 @@ from . import virtual
 from kombu.five import items, Empty
 from kombu.transport import base
 from kombu.utils.scheduling import FairCycle
-
+from kombu.utils import emergency_dump_state, uuid
 """
 TODO Agenda:
 - Declare
@@ -79,6 +79,7 @@ class Channel(virtual.Channel):
             return message
 
     def _put(self, routing_key, message, exchange=None, **kwargs):
+    	print(routing_key, message, exchange, kwargs)
         message['properties'].pop('message-id', None)
         exchange = message['properties']['delivery_info'].get('exchange')
         routing_key = message['properties']['delivery_info'].get('routing_key')
@@ -90,7 +91,7 @@ class Channel(virtual.Channel):
         else:
             raise Exception('Not Implemented')
 
-        conn = self.connection.get_connection()
+        conn = self.connection
         conn.send(destination=dest,
                   body=message['body'],
                   headers=message['properties'],
@@ -98,13 +99,40 @@ class Channel(virtual.Channel):
                   persistent='true')
         
 
-    def prepare_message(self, message, *a, **kw):
-        return message
+    def prepare_message(self, body, priority=None, content_type=None,
+                        content_encoding=None, headers=None, properties=None):
+        properties = properties or {}
+        info = properties.setdefault('delivery_info', {})
+        info['priority'] = priority or 0
 
-    def queue_declare(self, *a, **kw):
-        # TODO Implement
-        pass
-        
+        return {
+            'body': body,
+            'content-encoding': content_encoding,
+            'content-type': content_type,
+            'headers': headers or {},
+            'properties': properties or {},
+        }
+
+    def queue_declare(self, queue, passive=False, durable=False,
+                      exclusive=False, auto_delete=True, nowait=False,
+                      arguments=None):
+        headers = {'durable': durable,
+                   'exclusive': exclusive,
+                   'auto-delete': auto_delete,
+                   'arguments': arguments}
+
+        subscribe_id = uuid()
+        self.connection.subscribe(
+            destination='/queue/{}'.format(queue),
+            id=subscribe_id,
+            headers=headers
+            )
+        self.connection.unsubscribe(
+            destination='/queue/{}'.format(queue),
+            id=subscribe_id,
+            headers=headers
+            )
+
     def queue_bind(self, queue, exchange=None, routing_key='',
                    arguments=None, **kwargs):
         exchange = exchange or 'amq.direct'
@@ -129,10 +157,8 @@ class Channel(virtual.Channel):
         else:
             raise Exception('Not Implemented')
 
-        # 
-        import random
         conn = self.connection
-        conn.subscribe(destination=dest, id=random.randint(1,100), headers={}, ack='auto')
+        conn.subscribe(destination=dest, id=uuid(), headers={}, ack='auto')
 
     
     def basic_consume(self, queue, no_ack, callback, consumer_tag, **kwargs):
@@ -150,25 +176,13 @@ class Channel(virtual.Channel):
         self._reset_cycle()
 
 
-    def basic_publish(self, message, **kw):
-        exchange = kw.get('exchange')
-        routing_key = kw.get('routing_key')
-        queue = kw.get('queue')
-        if exchange and routing_key:
-            dest = "/exchange/{}/{}".format(exchange, routing_key)
-        elif queue:
-            dest = "/queue/{}".format(queue)
-        else:
-            raise Exception('Not Implemented')
+    def basic_publish(self, message, exchange, routing_key, **kwargs):
+    	print(message, kwargs)
+        dest = "/exchange/{}/{}".format(exchange, routing_key)
 
-        conn = self.connection.get_connection()
-        conn.send(destination=dest,
-                  body=message,
-                  headers=kw,
-                  ack='auto',
-                  persistent='true')
-        print("basic_publish", self,  kw)
-
+        self.connection.send(destination=dest,
+                             body=message['body'],
+                             headers=message['headers'])
 
     def close(self):
         # doto
