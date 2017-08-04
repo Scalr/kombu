@@ -518,6 +518,9 @@ class Connection(object):
                         obj.revive(channel)
                         if on_revive:
                             on_revive(channel)
+                        if isinstance(args[3], channel.__class__):
+                            args = list(args)
+                            args[3] = channel
                         got_connection += 1
                     except chan_errors as exc:
                         if max_retries is not None and retries > max_retries:
@@ -816,7 +819,7 @@ class Connection(object):
             require a channel.
         """
         # make sure we're still connected, and if not refresh.
-        self.connection
+        self.ensure_connection()
         if self._default_channel is None:
             self._default_channel = self.channel()
         return self._default_channel
