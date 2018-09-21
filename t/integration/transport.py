@@ -3,23 +3,19 @@ from __future__ import absolute_import, print_function, unicode_literals
 import random
 import socket
 import string
-import sys
 import time
-import unittest2 as unittest
+import unittest
 import warnings
 import weakref
 
 from case.skip import SkipTest
 
+from hashlib import sha256 as _digest
+
 from kombu import Connection
 from kombu import Exchange, Queue
 from kombu.five import buffer_t, range
 from kombu.utils.encoding import str_to_bytes
-
-if sys.version_info >= (2, 5):
-    from hashlib import sha256 as _digest
-else:
-    from sha import new as _digest  # noqa
 
 
 def _nobuf(x):

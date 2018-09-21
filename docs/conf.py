@@ -6,8 +6,8 @@ from sphinx_celery import conf
 globals().update(conf.build_config(
     'kombu', __file__,
     project='Kombu',
-    version_dev='4.0',
-    version_stable='3.0',
+    version_dev='4.3',
+    version_stable='4.2',
     canonical_url='http://docs.kombu.me',
     webdomain='kombu.me',
     github_project='celery/kombu',
@@ -22,8 +22,8 @@ globals().update(conf.build_config(
     apicheck_ignore_modules=[
         'kombu.entity',
         'kombu.messaging',
-        'kombu.async.aws.ext',
-        'kombu.async.aws.sqs.ext',
+        'kombu.asynchronous.aws.ext',
+        'kombu.asynchronous.aws.sqs.ext',
         'kombu.transport.qpid_patches',
         'kombu.utils',
         'kombu.transport.virtual.base',

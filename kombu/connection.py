@@ -173,7 +173,7 @@ class Connection(object):
                 # e.g. sqla+mysql://root:masterkey@localhost/
                 params['transport'], params['hostname'] = \
                     hostname.split('+', 1)
-                transport = self.uri_prefix = params['transport']
+                self.uri_prefix = params['transport']
             else:
                 transport = transport or urlparse(hostname).scheme
                 if not get_transport_cls(transport).can_parse_url:
@@ -818,8 +818,20 @@ class Connection(object):
             a connection is passed instead of a channel, to functions that
             require a channel.
         """
+        conn_opts = {}
+        transport_opts = self.transport_options
+        if transport_opts:
+            if 'max_retries' in transport_opts:
+                conn_opts['max_retries'] = transport_opts['max_retries']
+            if 'interval_start' in transport_opts:
+                conn_opts['interval_start'] = transport_opts['interval_start']
+            if 'interval_step' in transport_opts:
+                conn_opts['interval_step'] = transport_opts['interval_step']
+            if 'interval_max' in transport_opts:
+                conn_opts['interval_max'] = transport_opts['interval_max']
+
         # make sure we're still connected, and if not refresh.
-        self.ensure_connection()
+        self.ensure_connection(**conn_opts)
         if self._default_channel is None:
             self._default_channel = self.channel()
         return self._default_channel
@@ -893,7 +905,7 @@ class Connection(object):
 
     @property
     def is_evented(self):
-        return self.transport.implements.async
+        return self.transport.implements.asynchronous
 BrokerConnection = Connection  # noqa: E305
 
 

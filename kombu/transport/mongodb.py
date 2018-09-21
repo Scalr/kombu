@@ -239,7 +239,7 @@ class Channel(virtual.Channel):
 
     def _parse_uri(self, scheme='mongodb://'):
         # See mongodb uri documentation:
-        # http://docs.mongodb.org/manual/reference/connection-string/
+        # https://docs.mongodb.org/manual/reference/connection-string/
         client = self.connection.client
         hostname = client.hostname
 
@@ -274,18 +274,21 @@ class Channel(virtual.Channel):
                                  if self.connect_timeout else None),
         }
         options.update(parsed['options'])
+        options = self._prepare_client_options(options)
 
         return hostname, dbname, options
 
     def _prepare_client_options(self, options):
         if pymongo.version_tuple >= (3,):
             options.pop('auto_start_request', None)
+            if isinstance(options.get('readpreference'), int):
+                modes = pymongo.read_preferences._MONGOS_MODES
+                options['readpreference'] = modes[options['readpreference']]
         return options
 
     def _open(self, scheme='mongodb://'):
-        hostname, dbname, options = self._parse_uri(scheme=scheme)
+        hostname, dbname, conf = self._parse_uri(scheme=scheme)
 
-        conf = self._prepare_client_options(options)
         conf['host'] = hostname
 
         env = _detect_environment()
@@ -300,6 +303,7 @@ class Channel(virtual.Channel):
         database = mongoconn[dbname]
 
         version_str = mongoconn.server_info()['version']
+        version_str = version_str.split('-')[0]
         version = tuple(map(int, version_str.split('.')))
 
         if version < (1, 3):
@@ -338,7 +342,7 @@ class Channel(virtual.Channel):
                 [('expire_at', 1)], expireAfterSeconds=0)
 
     def _create_client(self):
-        """Actualy creates connection."""
+        """Actually creates connection."""
         database = self._open()
         self._create_broadcast(database)
         self._ensure_indexes(database)
@@ -378,15 +382,15 @@ class Channel(virtual.Channel):
 
     def _create_broadcast_cursor(self, exchange, routing_key, pattern, queue):
         if pymongo.version_tuple >= (3, ):
-            query = dict(
-                filter={'queue': exchange},
-                cursor_type=CursorType.TAILABLE
-            )
+            query = {
+                'filter': {'queue': exchange},
+                'cursor_type': CursorType.TAILABLE,
+            }
         else:
-            query = dict(
-                query={'queue': exchange},
-                tailable=True
-            )
+            query = {
+                'query': {'queue': exchange},
+                'tailable': True,
+            }
 
         cursor = self.broadcast.find(**query)
         ret = self._broadcast_cursors[queue] = BroadcastCursor(cursor)

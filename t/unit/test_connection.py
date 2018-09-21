@@ -65,38 +65,38 @@ class test_connection_utils:
 
     @pytest.mark.parametrize('url,expected', [
         ('amqp://user:pass@host:10000/vhost',
-         dict(userid='user', password='pass', hostname='host',
-              port=10000, virtual_host='vhost')),
+         {'userid': 'user', 'password': 'pass', 'hostname': 'host',
+          'port': 10000, 'virtual_host': 'vhost'}),
         ('amqp://user%61:%61pass@ho%61st:10000/v%2fhost',
-         dict(userid='usera', password='apass', hostname='hoast',
-              port=10000, virtual_host='v/host')),
+         {'userid': 'usera', 'password': 'apass', 'hostname': 'hoast',
+          'port': 10000, 'virtual_host': 'v/host'}),
         ('amqp://',
-         dict(userid='guest', password='guest', hostname='localhost',
-              port=5672, virtual_host='/')),
+         {'userid': 'guest', 'password': 'guest', 'hostname': 'localhost',
+          'port': 5672, 'virtual_host': '/'}),
         ('amqp://:@/',
-         dict(userid='guest', password='guest', hostname='localhost',
-              port=5672, virtual_host='/')),
+         {'userid': 'guest', 'password': 'guest', 'hostname': 'localhost',
+          'port': 5672, 'virtual_host': '/'}),
         ('amqp://user@/',
-         dict(userid='user', password='guest', hostname='localhost',
-              port=5672, virtual_host='/')),
+         {'userid': 'user', 'password': 'guest', 'hostname': 'localhost',
+          'port': 5672, 'virtual_host': '/'}),
         ('amqp://user:pass@/',
-         dict(userid='user', password='pass', hostname='localhost',
-              port=5672, virtual_host='/')),
+         {'userid': 'user', 'password': 'pass', 'hostname': 'localhost',
+          'port': 5672, 'virtual_host': '/'}),
         ('amqp://host',
-         dict(userid='guest', password='guest', hostname='host',
-              port=5672, virtual_host='/')),
+         {'userid': 'guest', 'password': 'guest', 'hostname': 'host',
+          'port': 5672, 'virtual_host': '/'}),
         ('amqp://:10000',
-         dict(userid='guest', password='guest', hostname='localhost',
-              port=10000, virtual_host='/')),
+         {'userid': 'guest', 'password': 'guest', 'hostname': 'localhost',
+          'port': 10000, 'virtual_host': '/'}),
         ('amqp:///vhost',
-         dict(userid='guest', password='guest', hostname='localhost',
-              port=5672, virtual_host='vhost')),
+         {'userid': 'guest', 'password': 'guest', 'hostname': 'localhost',
+          'port': 5672, 'virtual_host': 'vhost'}),
         ('amqp://host/',
-         dict(userid='guest', password='guest', hostname='host',
-              port=5672, virtual_host='/')),
+         {'userid': 'guest', 'password': 'guest', 'hostname': 'host',
+          'port': 5672, 'virtual_host': '/'}),
         ('amqp://host/%2f',
-         dict(userid='guest', password='guest', hostname='host',
-              port=5672, virtual_host='/')),
+         {'userid': 'guest', 'password': 'guest', 'hostname': 'host',
+          'port': 5672, 'virtual_host': '/'}),
     ])
     def test_rabbitmq_example_urls(self, url, expected):
         # see Appendix A of http://www.rabbitmq.com/uri-spec.html
@@ -242,7 +242,7 @@ class test_Connection:
 
     def test_is_evented(self):
         c = Connection(transport=Mock)
-        c.transport.implements.async = False
+        c.transport.implements.asynchronous = False
         assert not c.is_evented
 
     def test_register_with_event_loop(self):
@@ -379,6 +379,32 @@ class test_Connection:
 
         defchan.close.assert_called_with()
         assert conn._default_channel is None
+
+    def test_default_channel_no_transport_options(self):
+        conn = self.conn
+        conn.ensure_connection = Mock()
+
+        assert conn.default_channel
+        conn.ensure_connection.assert_called_with()
+
+    def test_default_channel_transport_options(self):
+        conn = self.conn
+        conn.transport_options = options = {
+            'max_retries': 1,
+            'interval_start': 2,
+            'interval_step': 3,
+            'interval_max': 4,
+            'ignore_this': True
+        }
+        conn.ensure_connection = Mock()
+
+        assert conn.default_channel
+        conn.ensure_connection.assert_called_with(**{
+            k: v for k, v in options.items()
+            if k in ['max_retries',
+                     'interval_start',
+                     'interval_step',
+                     'interval_max']})
 
     def test_ensure_connection(self):
         assert self.conn.ensure_connection()

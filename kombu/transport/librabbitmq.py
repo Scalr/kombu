@@ -1,6 +1,6 @@
 """`librabbitmq`_ transport.
 
-.. _`librabbitmq`: http://pypi.python.org/librabbitmq/
+.. _`librabbitmq`: https://pypi.python.org/librabbitmq/
 """
 from __future__ import absolute_import, unicode_literals
 
@@ -62,7 +62,8 @@ class Channel(amqp.Channel, base.StdChannel):
         return body, properties
 
     def prepare_queue_arguments(self, arguments, **kwargs):
-        return to_rabbitmq_queue_arguments(arguments, **kwargs)
+        arguments = to_rabbitmq_queue_arguments(arguments, **kwargs)
+        return {k.encode('utf8'): v for k, v in items(arguments)}
 
 
 class Connection(amqp.Connection):
@@ -91,7 +92,7 @@ class Transport(base.Transport):
     driver_name = 'librabbitmq'
 
     implements = base.Transport.implements.extend(
-        async=True,
+        asynchronous=True,
         heartbeats=False,
     )
 
@@ -145,7 +146,7 @@ class Transport(base.Transport):
                 channel.connection = None
             try:
                 os.close(connection.fileno())
-            except OSError:
+            except (OSError, ValueError):
                 pass
             connection.channels.clear()
             connection.callbacks.clear()
