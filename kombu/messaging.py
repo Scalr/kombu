@@ -397,7 +397,8 @@ class Consumer(object):
         """Revive consumer after connection loss."""
         self._active_tags.clear()
         channel = self.channel = maybe_channel(channel)
-        for qname, queue in items(self._queues):
+        # modify dict size while iterating over it is not allowed
+        for qname, queue in list(items(self._queues)):
             # name may have changed after declare
             self._queues.pop(qname, None)
             queue = self._queues[queue.name] = queue(self.channel)
@@ -434,7 +435,7 @@ class Consumer(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.channel:
+        if self.channel and self.channel.connection:
             conn_errors = self.channel.connection.client.connection_errors
             if not isinstance(exc_val, conn_errors):
                 try:

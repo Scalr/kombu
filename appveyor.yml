@@ -20,6 +20,18 @@ environment:
       PYTHON_VERSION: "3.4.x"
       PYTHON_ARCH: "32"
 
+    - PYTHON: "C:\\Python35"
+      PYTHON_VERSION: "3.5.x"
+      PYTHON_ARCH: "32"
+
+    - PYTHON: "C:\\Python36"
+      PYTHON_VERSION: "3.6.x"
+      PYTHON_ARCH: "32"
+
+#    - PYTHON: "C:\\Python37"
+#      PYTHON_VERSION: "3.7.x"
+#      PYTHON_ARCH: "32"
+
     - PYTHON: "C:\\Python27-x64"
       PYTHON_VERSION: "2.7.x"
       PYTHON_ARCH: "64"
@@ -30,6 +42,20 @@ environment:
       PYTHON_ARCH: "64"
       WINDOWS_SDK_VERSION: "v7.1"
 
+    - PYTHON: "C:\\Python35-x64"
+      PYTHON_VERSION: "3.5.x"
+      PYTHON_ARCH: "64"
+      WINDOWS_SDK_VERSION: "v7.1"
+
+    - PYTHON: "C:\\Python36-x64"
+      PYTHON_VERSION: "3.6.x"
+      PYTHON_ARCH: "64"
+      WINDOWS_SDK_VERSION: "v7.1"
+
+#    - PYTHON: "C:\\Python37-x64"
+#      PYTHON_VERSION: "3.7.x"
+#      PYTHON_ARCH: "64"
+#      WINDOWS_SDK_VERSION: "v7.1"
 
 init:
   - "ECHO %PYTHON% %PYTHON_VERSION% %PYTHON_ARCH%"
@@ -49,6 +75,9 @@ after_test:
 
 artifacts:
   - path: dist\*
+
+cache:
+- '%LOCALAPPDATA%\pip\Cache'
 
 #on_success:
 #  - TODO: upload the content of dist/*.whl to a public wheelhouse

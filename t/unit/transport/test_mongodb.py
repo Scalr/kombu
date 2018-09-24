@@ -81,6 +81,12 @@ class test_mongodb_uri_parsing:
         assert hostname == 'mongodb://foo:bar@localhost/dbname'
         assert dbname == 'dbname'
 
+    def test_correct_readpreference(self):
+        url = 'mongodb://localhost/dbname?readpreference=nearest'
+        channel = _create_mock_connection(url).default_channel
+        hostname, dbname, options = channel._parse_uri()
+        assert options['readpreference'] == 'nearest'
+
 
 class BaseMongoDBChannelCase:
 
@@ -352,6 +358,15 @@ class test_mongodb_channel(BaseMongoDBChannelCase):
                 cursor_type=pymongo.CursorType.TAILABLE,
                 filter={'queue': 'fanout_exchange1'},
             )
+
+    def test_open_rc_version(self):
+        import pymongo
+
+        def server_info(self):
+            return {'version': '3.6.0-rc'}
+
+        with patch.object(pymongo.MongoClient, 'server_info', server_info):
+            self.channel._open()
 
 
 @skip.unless_module('pymongo')

@@ -27,8 +27,8 @@ import os
 import socket
 
 from kombu.five import Empty
-from kombu.utils.encoding import bytes_to_str
-from kombu.utils.json import loads, dumps
+from kombu.utils.encoding import bytes_to_str, ensure_bytes
+from kombu.utils.json import dumps, loads
 
 from . import virtual
 
@@ -67,8 +67,8 @@ try:
         socket.error,
     )
 except ImportError:
-    kazoo = None                                    # noqa
-    KZ_CONNECTION_ERRORS = KZ_CHANNEL_ERRORS = ()   # noqa
+    kazoo = None  # noqa
+    KZ_CONNECTION_ERRORS = KZ_CHANNEL_ERRORS = ()  # noqa
 
 DEFAULT_PORT = 2181
 
@@ -81,8 +81,13 @@ class Channel(virtual.Channel):
     _client = None
     _queues = {}
 
+    def __init__(self, connection, **kwargs):
+        super(Channel, self).__init__(connection, **kwargs)
+        vhost = self.connection.client.virtual_host
+        self._vhost = '/{}'.format(vhost.strip('/'))
+
     def _get_path(self, queue_name):
-        return os.path.join(self.vhost, queue_name)
+        return os.path.join(self._vhost, queue_name)
 
     def _get_queue(self, queue_name):
         queue = self._queues.get(queue_name, None)
@@ -98,7 +103,7 @@ class Channel(virtual.Channel):
 
     def _put(self, queue, message, **kwargs):
         return self._get_queue(queue).put(
-            dumps(message),
+            ensure_bytes(dumps(message)),
             priority=self._get_message_priority(message, reverse=True),
         )
 
@@ -141,7 +146,6 @@ class Channel(virtual.Channel):
 
     def _open(self):
         conninfo = self.connection.client
-        self.vhost = os.path.join('/', conninfo.virtual_host[0:-1])
         hosts = []
         if conninfo.alt:
             for host_port in conninfo.alt:

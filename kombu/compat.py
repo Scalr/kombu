@@ -1,6 +1,6 @@
 """Carrot compatibility interface.
 
-See http://packages.python.org/pypi/carrot for documentation.
+See https://pypi.python.org/pypi/carrot for documentation.
 """
 from __future__ import absolute_import, unicode_literals
 
@@ -20,7 +20,7 @@ def _iterconsume(connection, consumer, no_ack=False, limit=None):
     consumer.consume(no_ack=no_ack)
     for iteration in count(0):  # for infinity
         if limit and iteration >= limit:
-            raise StopIteration
+            break
         yield connection.drain_events()
 
 
@@ -85,7 +85,6 @@ class Consumer(messaging.Consumer):
     durable = True
     exclusive = False
     auto_delete = False
-    exchange_type = 'direct'
     _closed = False
 
     def __init__(self, connection, queue=None, exchange=None,
@@ -166,7 +165,7 @@ class Consumer(messaging.Consumer):
             item = self.fetch()
             if (not infinite and item is None) or \
                     (limit and items_since_start >= limit):
-                raise StopIteration
+                break
             yield item
 
 

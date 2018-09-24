@@ -4,6 +4,201 @@
  Change history
 ================
 
+.. _version-4.2.1:
+
+4.2.1
+=====
+:release-date: 2018-05-21 09:00 A.M IST
+:release-by: Omer Katz
+
+.. .. note::
+
+  The 4.2.0 release contained remains of the ``async`` module by accident.
+  This is now fixed.
+
+- Handle librabbitmq fileno raising a ValueError when socket is not connected.
+
+  Contributed by **Bryan Shelton**
+
+.. _version-4.2.0:
+
+4.2.0
+=====
+:release-date: 2018-05-21 09:00 A.M IST
+:release-by: Omer Katz
+
+- Now passing ``max_retries``, ``interval_start``, ``interval_step``,
+  ``interval_max`` parameters from broker ``transport_options`` to
+  :meth:`~kombu.Connection.ensure_connection` when returning
+  :meth:`~kombu.Connection.default_connection` (Issue #765).
+
+    Contributed by **Anthony Lukach**.
+
+- Qpid: messages are now durable by default
+
+    Contributed by **David Davis**
+
+- Kombu now requires version 2.10.4 or greater of the redis library,
+  in line with Celery
+
+    Contributed by **Colin Jeanne**
+
+- Fixed ImportError in some environments with outdated simplejson
+
+    Contributed by **Aaron Morris**
+
+- MongoDB: fixed failure on MongoDB versions with an "-rc" tag
+
+    Contributed by **dust8**
+
+- Ensure periodic polling frequency does not exceed timeout in
+  virtual transport
+
+    Contributed by **Arcadiy Ivanov**
+
+- Fixed string handling when using python-future module
+
+    Contributed by **John Koehl"
+
+- Replaced "async" with "asynchronous" in preparation for Python 3.7
+
+    Contributed by **Thomas Achtemichuk**
+
+- Allow removing pool size limit when in use
+
+    Contributed by **Alex Hill**
+
+- Codebase improvements and fixes by:
+
+    - **j2gg0s**
+    - **Jon Dufresne**
+    - **Jonas Lergell**
+    - **Mads Jensen**
+    - **Nicolas Delaby**
+    - **Omer Katz**
+
+- Documentation improvements by:
+
+    - **Felix Yan**
+    - **Harry Moreno**
+    - **Mads Jensen**
+    - **Omer Katz**
+    - **Radha Krishna. S.**
+    - **Wojciech Matyśkiewicz**
+
+.. _version-4.1.0:
+
+4.1.0
+=====
+:release-date: 2017-07-17 04:45 P.M MST
+:release-by: Anthony Lukach
+
+- SQS: Added support for long-polling on all supported queries. Fixed bug
+  causing error on parsing responses with no retrieved messages from SQS.
+
+    Contributed by **Anthony Lukach**.
+
+- Async hub: Fixed potential infinite loop while performing todo tasks
+  (Issue celery/celery#3712).
+
+- Qpid: Fixed bug where messages could have duplicate ``delivery_tag``
+  (Issue #563).
+
+    Contributed by **bmbouter**.
+
+- MongoDB: Fixed problem with using ``readPreference`` option at pymongo 3.x.
+
+    Contributed by **Mikhail Elovskikh**.
+
+- Re-added support for :pypi:``SQLAlchemy``
+
+    Contributed by **Amin Ghadersohi**.
+
+- SQS: Fixed bug where hostname would default to ``localhost`` if not specified
+  in settings.
+
+    Contributed by **Anthony Lukach**.
+
+- Redis: Added support for reading password from transport URL (Issue #677).
+
+    Contributed by **George Psarakis**.
+
+- RabbitMQ: Ensured safer encoding of queue arguments.
+
+    Contributed by **Robert Kopaczewski**.
+
+- Added fallback to :func:``uuid.uuid5`` in :func:``generate_oid`` if
+  :func:``uuid.uuid3`` fails.
+
+    Contributed by **Bill Nottingham**.
+
+- Fixed race condition and innacurrate timeouts for
+  :class:``kombu.simple.SimpleBase`` (Issue #720).
+
+    Contributed by **c-nichols**.
+
+- Zookeeper: Fixed last chroot character trimming
+
+    Contributed by **Dima Kurguzov**.
+
+- RabbitMQ: Fixed bug causing an exception when attempting to close an
+  already-closed connection (Issue #690).
+
+    Contributed by **eavictor**.
+
+- Removed deprecated use of StopIteration in generators and invalid regex
+  escape sequence.
+
+    Contributed by **Jon Dufresne**.
+
+- Added Python 3.6 to CI testing.
+
+    Contributed by **Jon Dufresne**.
+
+- SQS: Allowed endpoint URL to be specified in the boto3 connection.
+
+    Contributed by **georgepsarakis**.
+
+- SQS: Added support for Python 3.4.
+
+    Contributed by **Anthony Lukach**.
+
+- SQS: ``kombu[sqs]`` now depends on :pypi:`boto3` (no longer using
+  :pypi:`boto)`.
+
+    - Adds support for Python 3.4+
+    - Adds support for FIFO queues (Issue #678) and (Issue celery/celery#3690)
+    - Avoids issues around a broken endpoints file (Issue celery/celery#3672)
+
+    Contributed by **Mischa Spiegelmock** and **Jerry Seutter**.
+
+- Zookeeper: Added support for delaying task with Python 3.
+
+    Contributed by **Dima Kurguzov**.
+
+- SQS: Fixed bug where :meth:`kombu.transport.SQS.drain_events` did not support
+  callback argument (Issue #694).
+
+    Contributed by **Michael Montgomery**.
+
+- Fixed bug around modifying dictionary size while iterating over it
+  (Issue #675).
+
+    Contributed by **Felix Yan**.
+
+- etcd: Added handling for :exc:`EtcdException` exception rather than
+  :exc:`EtcdError`.
+
+    Contributed by **Stephen Milner**.
+
+- Documentation improvements by:
+
+    - **Mads Jensen**
+    - **Matias Insaurralde**
+    - **Omer Katz**
+    - **Dmitry Dygalo**
+    - **Christopher Hoskin**
+
 .. _version-4.0.2:
 
 4.0.2

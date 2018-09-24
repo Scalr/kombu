@@ -462,9 +462,9 @@ class Channel(AbstractChannel, base.StdChannel):
         self.closed = False
 
         # instantiate exchange types
-        self.exchange_types = dict(
-            (typ, cls(self)) for typ, cls in items(self.exchange_types)
-        )
+        self.exchange_types = {
+            typ: cls(self) for typ, cls in items(self.exchange_types)
+        }
 
         try:
             self.channel_id = self.connection._avail_channel_ids.pop()
@@ -857,7 +857,7 @@ class Management(base.Management):
         self.channel = transport.client.channel()
 
     def get_bindings(self):
-        return [dict(destination=q, source=e, routing_key=r)
+        return [{'destination': q, 'source': e, 'routing_key': r}
                 for q, e, r in self.channel.list_bindings()]
 
     def close(self):
@@ -898,7 +898,7 @@ class Transport(base.Transport):
     channel_max = 65535
 
     implements = base.Transport.implements.extend(
-        async=False,
+        asynchronous=False,
         exchange_type=frozenset(['direct', 'topic']),
         heartbeats=False,
     )
@@ -956,6 +956,8 @@ class Transport(base.Transport):
         time_start = monotonic()
         get = self.cycle.get
         polling_interval = self.polling_interval
+        if timeout and polling_interval and polling_interval > timeout:
+            polling_interval = timeout
         while 1:
             try:
                 get(self._deliver, timeout=timeout)

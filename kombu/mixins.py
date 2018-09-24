@@ -18,7 +18,7 @@ from .utils.encoding import safe_repr
 from .utils.limits import TokenBucket
 from .utils.objects import cached_property
 
-__all__ = ['ConsumerMixin']
+__all__ = ['ConsumerMixin', 'ConsumerProducerMixin']
 
 logger = get_logger(__name__)
 debug, info, warn, error = logger.debug, logger.info, logger.warn, logger.error
@@ -49,7 +49,7 @@ class ConsumerMixin(object):
         .. code-block:: python
 
             class Worker(ConsumerMixin):
-                task_queue = Queue('tasks', Exchange('tasks'), 'tasks'))
+                task_queue = Queue('tasks', Exchange('tasks'), 'tasks')
 
                 def __init__(self, connection):
                     self.connection = None

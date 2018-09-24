@@ -23,9 +23,9 @@ or to install the requirements manually:
     to underlying dependencies not being compatible. This version is
     tested and works with with Python 2.7.
 
-.. _`Qpid`: http://qpid.apache.org/
-.. _`qpid-python`: http://pypi.python.org/pypi/qpid-python/
-.. _`qpid-tools`: http://pypi.python.org/pypi/qpid-tools/
+.. _`Qpid`: https://qpid.apache.org/
+.. _`qpid-python`: https://pypi.python.org/pypi/qpid-python/
+.. _`qpid-tools`: https://pypi.python.org/pypi/qpid-tools/
 
 Authentication
 ==============
@@ -116,7 +116,7 @@ except ImportError:  # pragma: no cover
     qpid = None
 
 
-from kombu.five import Empty, items, monotonic
+from kombu.five import Empty, items, monotonic, PY3
 from kombu.log import get_logger
 from kombu.transport.virtual import Base64, Message
 from kombu.transport import base
@@ -129,8 +129,6 @@ OBJECT_ALREADY_EXISTS_STRING = 'object already exists'
 
 VERSION = (1, 0, 0)
 __version__ = '.'.join(map(str, VERSION))
-
-PY3 = sys.version_info[0] == 3
 
 
 def dependency_is_none(dependency):
@@ -427,7 +425,8 @@ class Channel(base.StdChannel):
             rx.close()
         return message
 
-    def _put(self, routing_key, message, exchange=None, **kwargs):
+    def _put(self, routing_key, message, exchange=None, durable=True,
+             **kwargs):
         """Synchronously send a single message onto a queue or exchange.
 
         An internal method which synchronously sends a single message onto
@@ -460,6 +459,9 @@ class Channel(base.StdChannel):
             should be sent on. If no exchange is specified, the message is
             sent directly to a queue specified by routing_key.
         :type exchange: str
+        :keyword durable: whether or not the message should persist or be
+            durable.
+        :type durable: bool
 
         """
         if not exchange:
@@ -472,6 +474,7 @@ class Channel(base.StdChannel):
             msg_subject = str(routing_key)
         sender = self.transport.session.sender(address)
         qpid_message = qpid.messaging.Message(content=message,
+                                              durable=durable,
                                               subject=msg_subject)
         try:
             sender.send(qpid_message, sync=True)
@@ -850,7 +853,7 @@ class Channel(base.StdChannel):
         except Empty:
             pass
 
-    def basic_ack(self, delivery_tag):
+    def basic_ack(self, delivery_tag, multiple=False):
         """Acknowledge a message by delivery_tag.
 
         Acknowledges a message referenced by delivery_tag. Messages can
@@ -864,8 +867,12 @@ class Channel(base.StdChannel):
         :param delivery_tag: The delivery tag associated with the message
             to be acknowledged.
         :type delivery_tag: uuid.UUID
+        :param multiple: not implemented. If set to True an AssertionError
+            is raised.
+        :type multiple: bool
 
         """
+        assert multiple is False
         self.qos.ack(delivery_tag)
 
     def basic_reject(self, delivery_tag, requeue=False):
@@ -1521,7 +1528,7 @@ class Transport(base.Transport):
         :type connection: kombu.transport.qpid.Connection
         :param loop: The asynchronous loop object that contains epoll like
             functionality.
-        :type loop: kombu.async.Hub
+        :type loop: kombu.asynchronous.Hub
 
         """
         os.read(self.r, 1)
@@ -1553,7 +1560,7 @@ class Transport(base.Transport):
             this Transport.
         :type connection: kombu.transport.qpid.Connection
         :param loop: A reference to the external loop.
-        :type loop: kombu.async.hub.Hub
+        :type loop: kombu.asynchronous.hub.Hub
 
         """
         self.r, self._w = os.pipe()

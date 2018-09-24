@@ -4,9 +4,9 @@
 
 |build-status| |coverage| |license| |wheel| |pyversion| |pyimp|
 
-:Version: 4.0.2
+:Version: 4.2.1
 :Web: http://kombu.me/
-:Download: http://pypi.python.org/pypi/kombu/
+:Download: https://pypi.python.org/pypi/kombu/
 :Source: https://github.com/celery/kombu/
 :Keywords: messaging, amqp, rabbitmq, redis, mongodb, python, queue
 
@@ -62,20 +62,20 @@ Features
 For an introduction to AMQP you should read the article `Rabbits and warrens`_,
 and the `Wikipedia article about AMQP`_.
 
-.. _`RabbitMQ`: http://www.rabbitmq.com/
-.. _`AMQP`: http://amqp.org
-.. _`py-amqp`: http://pypi.python.org/pypi/amqp/
-.. _`qpid-python`: http://pypi.python.org/pypi/qpid-python/
-.. _`Redis`: http://code.google.com/p/redis/
-.. _`Amazon SQS`: http://aws.amazon.com/sqs/
+.. _`RabbitMQ`: https://www.rabbitmq.com/
+.. _`AMQP`: https://amqp.org
+.. _`py-amqp`: https://pypi.python.org/pypi/amqp/
+.. _`qpid-python`: https://pypi.python.org/pypi/qpid-python/
+.. _`Redis`: https://redis.io
+.. _`Amazon SQS`: https://aws.amazon.com/sqs/
 .. _`Zookeeper`: https://zookeeper.apache.org/
-.. _`Rabbits and warrens`: http://blogs.digitar.com/jjww/2009/01/rabbits-and-warrens/
-.. _`amqplib`: http://barryp.org/software/py-amqplib/
-.. _`Wikipedia article about AMQP`: http://en.wikipedia.org/wiki/AMQP
-.. _`carrot`: http://pypi.python.org/pypi/carrot/
-.. _`librabbitmq`: http://pypi.python.org/pypi/librabbitmq
-.. _`Pyro`: http://pythonhosting.org/Pyro
-.. _`SoftLayer MQ`: http://www.softlayer.com/services/additional/message-queue
+.. _`Rabbits and warrens`: http://web.archive.org/web/20160323134044/http://blogs.digitar.com/jjww/2009/01/rabbits-and-warrens/
+.. _`amqplib`: https://barryp.org/software/py-amqplib/
+.. _`Wikipedia article about AMQP`: https://en.wikipedia.org/wiki/AMQP
+.. _`carrot`: https://pypi.python.org/pypi/carrot/
+.. _`librabbitmq`: https://pypi.python.org/pypi/librabbitmq
+.. _`Pyro`: https://pythonhosting.org/Pyro4
+.. _`SoftLayer MQ`: https://sldn.softlayer.com/reference/messagequeueapi
 
 .. _transport-comparison:
 
@@ -124,7 +124,7 @@ Kombu is using Sphinx, and the latest documentation can be found here:
 Quick overview
 --------------
 
-::
+.. code:: python
 
     from kombu import Connection, Exchange, Queue
 
@@ -169,7 +169,7 @@ Quick overview
 
 Or handle channels manually:
 
-::
+.. code:: python
 
     with connection.channel() as channel:
         producer = Producer(channel, ...)
@@ -179,7 +179,7 @@ Or handle channels manually:
 All objects can be used outside of with statements too,
 just remember to close the objects after use:
 
-::
+.. code:: python
 
     from kombu import Connection, Consumer, Producer
 
@@ -308,20 +308,20 @@ Getting Help
 Mailing list
 ------------
 
-Join the `carrot-users`_ mailing list.
+Join the `celery-users`_ mailing list.
 
-.. _`carrot-users`: http://groups.google.com/group/carrot-users/
+.. _`celery-users`: https://groups.google.com/group/celery-users/
 
 Bug tracker
 ===========
 
 If you have any suggestions, bug reports or annoyances please report them
-to our issue tracker at http://github.com/celery/kombu/issues/
+to our issue tracker at https://github.com/celery/kombu/issues/
 
 Contributing
 ============
 
-Development of `Kombu` happens at Github: http://github.com/celery/kombu
+Development of `Kombu` happens at Github: https://github.com/celery/kombu
 
 You are highly encouraged to participate in the development. If you don't
 like Github (for some reason) you're welcome to send regular patches.
@@ -346,14 +346,14 @@ file in the top distribution directory for the full license text.
 
 .. |wheel| image:: https://img.shields.io/pypi/wheel/kombu.svg
     :alt: Kombu can be installed via wheel
-    :target: http://pypi.python.org/pypi/kombu/
+    :target: https://pypi.python.org/pypi/kombu/
 
 .. |pyversion| image:: https://img.shields.io/pypi/pyversions/kombu.svg
     :alt: Supported Python versions.
-    :target: http://pypi.python.org/pypi/kombu/
+    :target: https://pypi.python.org/pypi/kombu/
 
 .. |pyimp| image:: https://img.shields.io/pypi/implementation/kombu.svg
     :alt: Support Python implementations.
-    :target: http://pypi.python.org/pypi/kombu/
+    :target: https://pypi.python.org/pypi/kombu/
 --
 
