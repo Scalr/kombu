@@ -70,7 +70,7 @@ class test_Channel:
     def test_basic_consume_registers_ack_status(self):
         self.channel.wait_returns = 'my-consumer-tag'
         self.channel.basic_consume('foo', no_ack=True)
-        assert 'my-consumer-tag' in self.channel.no_ack_consumers
+        assert 'm' in self.channel.no_ack_consumers
 
         self.channel.wait_returns = 'other-consumer-tag'
         self.channel.basic_consume('bar', no_ack=False)
