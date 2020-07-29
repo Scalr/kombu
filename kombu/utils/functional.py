@@ -4,23 +4,30 @@ from __future__ import absolute_import, unicode_literals
 import random
 import sys
 import threading
+import inspect
 
-from collections import Iterable, Mapping, OrderedDict
+from collections import OrderedDict
+
+try:
+    from collections.abc import Iterable, Mapping
+except ImportError:
+    from collections import Iterable, Mapping
+
 from itertools import count, repeat
-from time import sleep
+from time import sleep, time
 
 from vine.utils import wraps
 
 from kombu.five import (
-    UserDict, items, keys, python_2_unicode_compatible, string_t,
+    UserDict, items, keys, python_2_unicode_compatible, string_t, PY3,
 )
 
 from .encoding import safe_repr as _safe_repr
 
-__all__ = [
+__all__ = (
     'LRUCache', 'memoize', 'lazy', 'maybe_evaluate',
     'is_list', 'maybe_list', 'dictfilter',
-]
+)
 
 KEYWORD_MARK = object()
 
@@ -229,8 +236,8 @@ class lazy(object):
 
         def __cmp__(self, rhs):
             if isinstance(rhs, self.__class__):
-                return -cmp(rhs, self())
-            return cmp(self(), rhs)
+                return -cmp(rhs, self())  # noqa: F821
+            return cmp(self(), rhs)  # noqa: F821
 
 
 def maybe_evaluate(value):
@@ -240,18 +247,18 @@ def maybe_evaluate(value):
     return value
 
 
-def is_list(l, scalars=(Mapping, string_t), iters=(Iterable,)):
+def is_list(obj, scalars=(Mapping, string_t), iters=(Iterable,)):
     """Return true if the object is iterable.
 
     Note:
         Returns false if object is a mapping or string.
     """
-    return isinstance(l, iters) and not isinstance(l, scalars or ())
+    return isinstance(obj, iters) and not isinstance(obj, scalars or ())
 
 
-def maybe_list(l, scalars=(Mapping, string_t)):
+def maybe_list(obj, scalars=(Mapping, string_t)):
     """Return list of one element if ``l`` is a scalar."""
-    return l if l is None or is_list(l, scalars) else [l]
+    return obj if obj is None or is_list(obj, scalars) else [obj]
 
 
 def dictfilter(d=None, **kw):
@@ -293,9 +300,9 @@ def fxrangemax(start=1.0, stop=None, step=1.0, max=100.0):
         sum_ += cur
 
 
-def retry_over_time(fun, catch, args=[], kwargs={}, errback=None,
+def retry_over_time(fun, catch, args=None, kwargs=None, errback=None,
                     max_retries=None, interval_start=2, interval_step=2,
-                    interval_max=30, callback=None):
+                    interval_max=30, callback=None, timeout=None):
     """Retry the function over and over until max retries is exceeded.
 
     For each retry we sleep a for a while before we try again, this interval
@@ -316,22 +323,29 @@ def retry_over_time(fun, catch, args=[], kwargs={}, errback=None,
             which return the time in seconds to sleep next, and ``retries``
             is the number of previous retries.
         max_retries (int): Maximum number of retries before we give up.
-            If this is not set, we will retry forever.
+            If neither of this and timeout is set, we will retry forever.
+            If one of this and timeout is reached, stop.
         interval_start (float): How long (in seconds) we start sleeping
             between retries.
         interval_step (float): By how much the interval is increased for
             each retry.
         interval_max (float): Maximum number of seconds to sleep
             between retries.
+        timeout (int): Maximum seconds waiting before we give up.
     """
+    kwargs = {} if not kwargs else kwargs
+    args = [] if not args else args
     interval_range = fxrange(interval_start,
                              interval_max + interval_start,
                              interval_step, repeatlast=True)
+    end = time() + timeout if timeout else None
     for retries in count():
         try:
             return fun(*args, **kwargs)
         except catch as exc:
-            if max_retries and retries >= max_retries:
+            if max_retries is not None and retries >= max_retries:
+                raise
+            if end and time() > end:
                 raise
             if callback:
                 callback()
@@ -350,12 +364,26 @@ def reprkwargs(kwargs, sep=', ', fmt='{0}={1}'):
     return sep.join(fmt.format(k, _safe_repr(v)) for k, v in items(kwargs))
 
 
-def reprcall(name, args=(), kwargs={}, sep=', '):
+def reprcall(name, args=(), kwargs=None, sep=', '):
+    kwargs = {} if not kwargs else kwargs
     return '{0}({1}{2}{3})'.format(
         name, sep.join(map(_safe_repr, args or ())),
         (args and kwargs) and sep or '',
         reprkwargs(kwargs, sep),
     )
+
+
+def accepts_argument(func, argument_name):
+    if PY3:
+        argument_spec = inspect.getfullargspec(func)
+        return (
+            argument_name in argument_spec.args or
+            argument_name in argument_spec.kwonlyargs
+        )
+
+    argument_spec = inspect.getargspec(func)
+    argument_names = argument_spec.args
+    return argument_name in argument_names
 
 
 # Compat names (before kombu 3.0)

@@ -21,7 +21,8 @@ from kombu.utils.json import loads, dumps
 from kombu.utils.objects import cached_property
 from kombu.utils.scheduling import cycle_by_name
 from kombu.utils.url import _parse_url
-from kombu.utils.uuid import uuid
+from kombu.utils.compat import _detect_environment
+from kombu.utils.functional import accepts_argument
 
 from . import virtual
 
@@ -41,6 +42,8 @@ crit, warn = logger.critical, logger.warn
 
 DEFAULT_PORT = 6379
 DEFAULT_DB = 0
+
+DEFAULT_HEALTH_CHECK_INTERVAL = 25
 
 PRIORITY_STEPS = [0, 3, 6, 9]
 
@@ -104,28 +107,24 @@ class MutexHeld(Exception):
 
 @contextmanager
 def Mutex(client, name, expire):
-    """The Redis lock implementation (probably shaky)."""
-    lock_id = uuid()
-    i_won = client.setnx(name, lock_id)
+    """Acquire redis lock in non blocking way.
+
+    Raise MutexHeld if not successful.
+    """
+    lock = client.lock(name, timeout=expire)
+    lock_acquired = False
     try:
-        if i_won:
-            client.expire(name, expire)
+        lock_acquired = lock.acquire(blocking=False)
+        if lock_acquired:
             yield
         else:
-            if not client.ttl(name):
-                client.expire(name, expire)
             raise MutexHeld()
     finally:
-        if i_won:
+        if lock_acquired:
             try:
-                with client.pipeline(True) as pipe:
-                    pipe.watch(name)
-                    if pipe.get(name) == lock_id:
-                        pipe.multi()
-                        pipe.delete(name)
-                        pipe.execute()
-                    pipe.unwatch()
-            except redis.WatchError:
+                lock.release()
+            except redis.exceptions.LockNotOwnedError:
+                # when lock is expired
                 pass
 
 
@@ -145,8 +144,15 @@ class QoS(virtual.QoS):
     def append(self, message, delivery_tag):
         delivery = message.delivery_info
         EX, RK = delivery['exchange'], delivery['routing_key']
+        # TODO: Remove this once we soley on Redis-py 3.0.0+
+        if redis.VERSION[0] >= 3:
+            # Redis-py changed the format of zadd args in v3.0.0
+            zadd_args = [{delivery_tag: time()}]
+        else:
+            zadd_args = [time(), delivery_tag]
+
         with self.pipe_or_acquire() as pipe:
-            pipe.zadd(self.unacked_index_key, time(), delivery_tag) \
+            pipe.zadd(self.unacked_index_key, *zadd_args) \
                 .hset(self.unacked_key, delivery_tag,
                       dumps([message._raw, EX, RK])) \
                 .execute()
@@ -189,6 +195,9 @@ class QoS(virtual.QoS):
             try:
                 with Mutex(client, self.unacked_mutex_key,
                            self.unacked_mutex_expire):
+                    env = _detect_environment()
+                    if env == 'gevent':
+                        ceil = time()
                     visible = client.zrevrangebyscore(
                         self.unacked_index_key, ceil, 0,
                         start=num and start, num=num, withscores=True)
@@ -331,6 +340,14 @@ class MultiChannelPoller(object):
                     num=channel.unacked_restore_limit,
                 )
 
+    def maybe_check_subclient_health(self):
+        for channel in self._channels:
+            # only if subclient property is cached
+            client = channel.__dict__.get('subclient')
+            if client is not None \
+                    and callable(getattr(client, 'check_health', None)):
+                client.check_health()
+
     def on_readable(self, fileno):
         chan, type = self._fd_to_chan[fileno]
         if chan.qos.can_consume():
@@ -405,7 +422,9 @@ class Channel(virtual.Channel):
     socket_connect_timeout = None
     socket_keepalive = None
     socket_keepalive_options = None
+    retry_on_timeout = None
     max_connections = 10
+    health_check_interval = DEFAULT_HEALTH_CHECK_INTERVAL
     #: Transport option to disable fanout keyprefix.
     #: Can also be string, in which case it changes the default
     #: prefix ('/{db}.') into to something else.  The prefix must
@@ -453,7 +472,8 @@ class Channel(virtual.Channel):
 
     from_transport_options = (
         virtual.Channel.from_transport_options +
-        ('ack_emulation',
+        ('sep',
+         'ack_emulation',
          'unacked_key',
          'unacked_index_key',
          'unacked_mutex_key',
@@ -468,14 +488,15 @@ class Channel(virtual.Channel):
          'socket_keepalive_options',
          'queue_order_strategy',
          'max_connections',
+         'health_check_interval',
+         'retry_on_timeout',
          'priority_steps')  # <-- do not add comma here!
     )
 
     connection_class = redis.Connection if redis else None
 
     def __init__(self, *args, **kwargs):
-        super_ = super(Channel, self)
-        super_.__init__(*args, **kwargs)
+        super(Channel, self).__init__(*args, **kwargs)
 
         if not self.ack_emulation:  # disable visibility timeout
             self.QoS = virtual.QoS
@@ -667,9 +688,8 @@ class Channel(virtual.Channel):
             ret.append(self._receive_one(c))
         except Empty:
             pass
-        if c.connection is not None:
-            while c.connection.can_read(timeout=0):
-                ret.append(self._receive_one(c))
+        while c.connection is not None and c.connection.can_read(timeout=0):
+            ret.append(self._receive_one(c))
         return any(ret)
 
     def _receive_one(self, c):
@@ -753,7 +773,9 @@ class Channel(virtual.Channel):
 
     def _q_for_pri(self, queue, pri):
         pri = self.priority(pri)
-        return '%s%s%s' % ((queue, self.sep, pri) if pri else (queue, '', ''))
+        if pri:
+            return "{}{}{}".format(queue, self.sep, pri)
+        return queue
 
     def priority(self, n):
         steps = self.priority_steps
@@ -883,7 +905,20 @@ class Channel(virtual.Channel):
             'socket_connect_timeout': self.socket_connect_timeout,
             'socket_keepalive': self.socket_keepalive,
             'socket_keepalive_options': self.socket_keepalive_options,
+            'health_check_interval': self.health_check_interval,
+            'retry_on_timeout': self.retry_on_timeout,
         }
+
+        conn_class = self.connection_class
+
+        # If the connection class does not support the `health_check_interval`
+        # argument then remove it.
+        if (
+            hasattr(conn_class, '__init__') and
+            not accepts_argument(conn_class.__init__, 'health_check_interval')
+        ):
+            connparams.pop('health_check_interval')
+
         if conninfo.ssl:
             # Connection(ssl={}) must be a dict containing the keys:
             # 'ssl_cert_reqs', 'ssl_ca_certs', 'ssl_certfile', 'ssl_keyfile'
@@ -939,9 +974,9 @@ class Channel(virtual.Channel):
         return redis.ConnectionPool(**params)
 
     def _get_client(self):
-        if redis.VERSION < (2, 10, 5):
+        if redis.VERSION < (3, 2, 0):
             raise VersionMismatch(
-                'Redis transport requires redis-py versions 2.10.5 or later. '
+                'Redis transport requires redis-py versions 3.2.0 or later. '
                 'You have {0.__version__}'.format(redis))
         return redis.StrictRedis
 
@@ -1034,6 +1069,14 @@ class Transport(virtual.Transport):
             [add_reader(fd, on_readable, fd) for fd in cycle.fds]
         loop.on_tick.add(on_poll_start)
         loop.call_repeatedly(10, cycle.maybe_restore_messages)
+        health_check_interval = connection.client.transport_options.get(
+            'health_check_interval',
+            DEFAULT_HEALTH_CHECK_INTERVAL
+        )
+        loop.call_repeatedly(
+            health_check_interval,
+            cycle.maybe_check_subclient_health
+        )
 
     def on_readable(self, fileno):
         """Handle AIO event for one of our file descriptors."""
@@ -1051,9 +1094,7 @@ class SentinelChannel(Channel):
 
     sentinel://0.0.0.0:26379;sentinel://0.0.0.0:26380/...
 
-    where each sentinel is separated by a `;`.  Multiple sentinels are handled
-    by :class:`kombu.Connection` constructor, and placed in the alternative
-    list of servers to connect to in case of connection failure.
+    where each sentinel is separated by a `;`.
 
     Other arguments for the sentinel should come from the transport options
     (see :method:`Celery.connection` which is in charge of creating the
@@ -1078,10 +1119,20 @@ class SentinelChannel(Channel):
         additional_params.pop('host', None)
         additional_params.pop('port', None)
 
+        sentinels = []
+        for url in self.connection.client.alt:
+            url = _parse_url(url)
+            if url.scheme == 'sentinel':
+                sentinels.append((url.hostname, url.port))
+
+        # Fallback for when only one sentinel is provided.
+        if not sentinels:
+            sentinels.append((connparams['host'], connparams['port']))
+
         sentinel_inst = sentinel.Sentinel(
-            [(connparams['host'], connparams['port'])],
+            sentinels,
             min_other_sentinels=getattr(self, 'min_other_sentinels', 0),
-            sentinel_kwargs=getattr(self, 'sentinel_kwargs', {}),
+            sentinel_kwargs=getattr(self, 'sentinel_kwargs', None),
             **additional_params)
 
         master_name = getattr(self, 'master_name', None)

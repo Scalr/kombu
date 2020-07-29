@@ -68,11 +68,11 @@ class test_Channel:
         assert self.channel.connection is None
 
     def test_basic_consume_registers_ack_status(self):
-        self.channel.wait_returns = ('my-consumer-tag', )
+        self.channel.wait_returns = ['my-consumer-tag']
         self.channel.basic_consume('foo', no_ack=True)
         assert 'my-consumer-tag' in self.channel.no_ack_consumers
 
-        self.channel.wait_returns = 'other-consumer-tag'
+        self.channel.wait_returns = ['other-consumer-tag']
         self.channel.basic_consume('bar', no_ack=False)
         assert 'other-consumer-tag' not in self.channel.no_ack_consumers
 
@@ -90,6 +90,15 @@ class test_Transport:
         connection = Mock()
         self.transport.create_channel(connection)
         connection.channel.assert_called_with()
+
+    def test_ssl_cert_passed(self):
+        ssl_dict = {
+            'ca_certs': '/etc/pki/tls/certs/something.crt',
+            'cert_reqs': "ssl.CERT_REQUIRED",
+        }
+        ssl_dict_copy = {k: ssl_dict[k] for k in ssl_dict}
+        connection = Connection('amqps://', ssl=ssl_dict_copy)
+        assert connection.transport.client.ssl == ssl_dict
 
     def test_driver_version(self):
         assert self.transport.driver_version()

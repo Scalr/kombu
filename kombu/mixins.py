@@ -18,10 +18,15 @@ from .utils.encoding import safe_repr
 from .utils.limits import TokenBucket
 from .utils.objects import cached_property
 
-__all__ = ['ConsumerMixin', 'ConsumerProducerMixin']
+__all__ = ('ConsumerMixin', 'ConsumerProducerMixin')
 
 logger = get_logger(__name__)
-debug, info, warn, error = logger.debug, logger.info, logger.warn, logger.error
+debug, info, warn, error = (
+    logger.debug,
+    logger.info,
+    logger.warning,
+    logger.error
+)
 
 W_CONN_LOST = """\
 Connection to broker lost, trying to re-establish connection...\

@@ -1,4 +1,6 @@
 """Base transport interface."""
+# flake8: noqa
+
 from __future__ import absolute_import, unicode_literals
 
 import errno
@@ -13,7 +15,7 @@ from kombu.utils.functional import dictfilter
 from kombu.utils.objects import cached_property
 from kombu.utils.time import maybe_s_to_ms
 
-__all__ = ['Message', 'StdChannel', 'Management', 'Transport']
+__all__ = ('Message', 'StdChannel', 'Management', 'Transport')
 
 RABBITMQ_QUEUE_ARGUMENTS = {  # type: Mapping[str, Tuple[str, Callable]]
     'expires': ('x-expires', maybe_s_to_ms),

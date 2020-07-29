@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Text Utilities."""
+# flake8: noqa
+
 from __future__ import absolute_import, unicode_literals
 
 from difflib import SequenceMatcher
@@ -11,7 +13,7 @@ from kombu.five import string_t
 def escape_regex(p, white=''):
     # type: (str, str) -> str
     """Escape string for use within a regular expression."""
-    # what's up with re.escape? that code must be neglected or someting
+    # what's up with re.escape? that code must be neglected or something
     return ''.join(c if c.isalnum() or c in white
                    else ('\\000' if c == '\000' else '\\' + c)
                    for c in p)
@@ -42,7 +44,7 @@ def fmatch_best(needle, haystack, min_ratio=0.6):
 
 
 def version_string_as_tuple(s):
-    # type (str) -> version_info_t
+    # type: (str) -> version_info_t
     """Convert version string to version info tuple."""
     v = _unpack_version(*s.split('.'))
     # X.Y.3a1 -> (X, Y, 3, 'a1')

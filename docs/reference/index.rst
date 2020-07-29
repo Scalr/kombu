@@ -10,6 +10,7 @@
 
     kombu
     kombu.common
+    kombu.matcher
     kombu.mixins
     kombu.simple
     kombu.clocks
@@ -38,6 +39,8 @@
     kombu.asynchronous.aws.sqs.message
     kombu.asynchronous.aws.sqs.queue
     kombu.transport
+    kombu.transport.azurestoragequeues
+    kombu.transport.azureservicebus
     kombu.transport.pyamqp
     kombu.transport.librabbitmq
     kombu.transport.qpid

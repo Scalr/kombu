@@ -72,12 +72,15 @@ class test_declaration_cached:
 class test_Broadcast:
 
     def test_arguments(self):
-        q = Broadcast(name='test_Broadcast')
-        assert q.name.startswith('bcast.')
-        assert q.alias == 'test_Broadcast'
-        assert q.auto_delete
-        assert q.exchange.name == 'test_Broadcast'
-        assert q.exchange.type == 'fanout'
+        with patch('kombu.common.uuid',
+                   return_value='test') as uuid_mock:
+            q = Broadcast(name='test_Broadcast')
+            uuid_mock.assert_called_with()
+            assert q.name == 'bcast.test'
+            assert q.alias == 'test_Broadcast'
+            assert q.auto_delete
+            assert q.exchange.name == 'test_Broadcast'
+            assert q.exchange.type == 'fanout'
 
         q = Broadcast('test_Broadcast', 'explicit_queue_name')
         assert q.name == 'explicit_queue_name'
@@ -86,53 +89,129 @@ class test_Broadcast:
         q2 = q(Mock())
         assert q2.name == q.name
 
+        with patch('kombu.common.uuid',
+                   return_value='test') as uuid_mock:
+            q = Broadcast('test_Broadcast',
+                          'explicit_queue_name',
+                          unique=True)
+            uuid_mock.assert_called_with()
+            assert q.name == 'explicit_queue_name.test'
+
+            q2 = q(Mock())
+            assert q2.name.split('.')[0] == q.name.split('.')[0]
+
 
 class test_maybe_declare:
 
-    def test_cacheable(self):
+    def _get_mock_channel(self):
+        # Given: A mock Channel with mock'd connection/client/entities
         channel = Mock()
-        client = channel.connection.client = Mock()
-        client.declared_entities = set()
-        entity = Mock()
-        entity.can_cache_declaration = True
-        entity.auto_delete = False
-        entity.is_bound = True
-        entity.channel = channel
+        channel.connection.client.declared_entities = set()
+        return channel
 
+    def _get_mock_entity(self, is_bound=False, can_cache_declaration=True):
+        # Given: Unbound mock Entity (will bind to channel when bind called
+        entity = Mock()
+        entity.can_cache_declaration = can_cache_declaration
+        entity.is_bound = is_bound
+
+        def _bind_entity(channel):
+            entity.channel = channel
+            entity.is_bound = True
+            return entity
+        entity.bind = _bind_entity
+        return entity
+
+    def test_cacheable(self):
+        # Given: A mock Channel and mock entity
+        channel = self._get_mock_channel()
+        # Given: A mock Entity that is already bound
+        entity = self._get_mock_entity(
+            is_bound=True, can_cache_declaration=True)
+        entity.channel = channel
+        entity.auto_delete = False
+        assert entity.is_bound, "Expected entity is bound to begin this test."
+
+        # When: Calling maybe_declare default
         maybe_declare(entity, channel)
+
+        # Then: It called declare on the entity queue and added it to list
         assert entity.declare.call_count == 1
         assert hash(entity) in channel.connection.client.declared_entities
 
+        # When: Calling maybe_declare default (again)
         maybe_declare(entity, channel)
+        # Then: we did not call declare again because its already in our list
         assert entity.declare.call_count == 1
 
+        # When: Entity channel connection has gone away
         entity.channel.connection = None
+        # Then: maybe_declare must raise a RecoverableConnectionError
         with pytest.raises(RecoverableConnectionError):
             maybe_declare(entity)
 
     def test_binds_entities(self):
-        channel = Mock()
-        channel.connection.client.declared_entities = set()
-        entity = Mock()
-        entity.can_cache_declaration = True
-        entity.is_bound = False
-        entity.bind.return_value = entity
-        entity.bind.return_value.channel = channel
+        # Given: A mock Channel and mock entity
+        channel = self._get_mock_channel()
+        # Given: A mock Entity that is not bound
+        entity = self._get_mock_entity()
+        assert not entity.is_bound, "Expected entity unbound to begin test."
 
+        # When: calling maybe_declare with default of no retry policy
         maybe_declare(entity, channel)
-        entity.bind.assert_called_with(channel)
+
+        # Then: the entity is now bound because it called to bind it
+        assert entity.is_bound is True, "Expected entity is now marked bound."
+
+    def test_binds_entities_when_retry_policy(self):
+        # Given: A mock Channel and mock entity
+        channel = self._get_mock_channel()
+        # Given: A mock Entity that is not bound
+        entity = self._get_mock_entity()
+        assert not entity.is_bound, "Expected entity unbound to begin test."
+
+        # Given: A retry policy
+        sample_retry_policy = {
+            'interval_start': 0,
+            'interval_max': 1,
+            'max_retries': 3,
+            'interval_step': 0.2,
+            'errback': lambda x: "Called test errback retry policy",
+        }
+
+        # When: calling maybe_declare with retry enabled
+        maybe_declare(entity, channel, retry=True, **sample_retry_policy)
+
+        # Then: the entity is now bound because it called to bind it
+        assert entity.is_bound is True, "Expected entity is now marked bound."
 
     def test_with_retry(self):
-        channel = Mock()
-        client = channel.connection.client = Mock()
-        client.declared_entities = set()
-        entity = Mock()
-        entity.can_cache_declaration = True
-        entity.is_bound = True
+        # Given: A mock Channel and mock entity
+        channel = self._get_mock_channel()
+        # Given: A mock Entity that is already bound
+        entity = self._get_mock_entity(
+            is_bound=True, can_cache_declaration=True)
         entity.channel = channel
-
+        assert entity.is_bound, "Expected entity is bound to begin this test."
+        # When calling maybe_declare with retry enabled (default policy)
         maybe_declare(entity, channel, retry=True)
+        # Then: the connection client used ensure to ensure the retry policy
         assert channel.connection.client.ensure.call_count
+
+    def test_with_retry_dropped_connection(self):
+        # Given: A mock Channel and mock entity
+        channel = self._get_mock_channel()
+        # Given: A mock Entity that is already bound
+        entity = self._get_mock_entity(
+            is_bound=True, can_cache_declaration=True)
+        entity.channel = channel
+        assert entity.is_bound, "Expected entity is bound to begin this test."
+        # When: Entity channel connection has gone away
+        entity.channel.connection = None
+        # When: calling maybe_declare with retry
+        # Then: the RecoverableConnectionError should be raised
+        with pytest.raises(RecoverableConnectionError):
+            maybe_declare(entity, channel, retry=True)
 
 
 class test_replies:
@@ -337,7 +416,7 @@ class test_QoS:
             # cannot use 2 ** 32 because of a bug on macOS Py2.5:
             # https://jira.mongodb.org/browse/PYTHON-389
             qos.set(4294967296)
-            logger.warn.assert_called()
+            logger.warning.assert_called()
             callback.assert_called_with(prefetch_count=0)
 
     def test_qos_increment_decrement(self):

@@ -24,8 +24,8 @@ or to install the requirements manually:
     tested and works with with Python 2.7.
 
 .. _`Qpid`: https://qpid.apache.org/
-.. _`qpid-python`: https://pypi.python.org/pypi/qpid-python/
-.. _`qpid-tools`: https://pypi.python.org/pypi/qpid-tools/
+.. _`qpid-python`: https://pypi.org/project/qpid-python/
+.. _`qpid-tools`: https://pypi.org/project/qpid-tools/
 
 Authentication
 ==============
@@ -119,11 +119,15 @@ except ImportError:  # pragma: no cover
 from kombu.five import Empty, items, monotonic, PY3
 from kombu.log import get_logger
 from kombu.transport.virtual import Base64, Message
-from kombu.transport import base
+from kombu.transport import base, virtual
 
 
 logger = get_logger(__name__)
 
+try:
+    buffer
+except NameError:
+    buffer = bytes
 
 OBJECT_ALREADY_EXISTS_STRING = 'object already exists'
 
@@ -1406,7 +1410,10 @@ class Transport(base.Transport):
     polling_interval = None
 
     # This Transport does support the Celery asynchronous event model.
-    supports_ev = True
+    implements = virtual.Transport.implements.extend(
+        asynchronous=True,
+        exchange_type=frozenset(['direct', 'topic', 'fanout']),
+    )
 
     # The driver type and name for identification purposes.
     driver_type = 'qpid'
@@ -1440,8 +1447,8 @@ class Transport(base.Transport):
         """Verify that the runtime environment is acceptable.
 
         This method is called as part of __init__ and raises a RuntimeError
-        in Python3 or PyPi environments. This module is not compatible with
-        Python3 or PyPi. The RuntimeError identifies this to the user up
+        in Python3 or PyPI environments. This module is not compatible with
+        Python3 or PyPI. The RuntimeError identifies this to the user up
         front along with suggesting Python 2.6+ be used instead.
 
         This method also checks that the dependencies qpidtoollibs and

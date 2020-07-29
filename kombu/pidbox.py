@@ -15,11 +15,14 @@ from . import Exchange, Queue, Consumer, Producer
 from .clocks import LamportClock
 from .common import maybe_declare, oid_from
 from .exceptions import InconsistencyError
-from .five import range
+from .five import range, string_t
 from .log import get_logger
 from .utils.functional import maybe_evaluate, reprcall
 from .utils.objects import cached_property
 from .utils.uuid import uuid
+from .matcher import match
+
+REPLY_QUEUE_EXPIRES = 10
 
 W_PIDBOX_IN_USE = """\
 A node named {node.hostname} is already using this process mailbox!
@@ -29,7 +32,7 @@ Or if you meant to start multiple nodes on the same host please make sure
 you give each node a unique node name!
 """
 
-__all__ = ['Node', 'Mailbox']
+__all__ = ('Node', 'Mailbox')
 logger = get_logger(__name__)
 debug, error = logger.debug, logger.error
 
@@ -112,7 +115,8 @@ class Node(object):
                        ticket=ticket)
         return reply
 
-    def handle(self, method, arguments={}):
+    def handle(self, method, arguments=None):
+        arguments = {} if not arguments else arguments
         return self.handlers[method](self.state, **arguments)
 
     def handle_call(self, method, arguments):
@@ -123,9 +127,21 @@ class Node(object):
 
     def handle_message(self, body, message=None):
         destination = body.get('destination')
+        pattern = body.get('pattern')
+        matcher = body.get('matcher')
         if message:
             self.adjust_clock(message.headers.get('clock') or 0)
-        if not destination or self.hostname in destination:
+        hostname = self.hostname
+        run_dispatch = False
+        if destination:
+            if hostname in destination:
+                run_dispatch = True
+        elif pattern and matcher:
+            if match(hostname, pattern, matcher):
+                run_dispatch = True
+        else:
+            run_dispatch = True
+        if run_dispatch:
             return self.dispatch(**body)
     dispatch_from_message = handle_message
 
@@ -193,21 +209,25 @@ class Mailbox(object):
         hostname = hostname or socket.gethostname()
         return self.node_cls(hostname, state, channel, handlers, mailbox=self)
 
-    def call(self, destination, command, kwargs={},
+    def call(self, destination, command, kwargs=None,
              timeout=None, callback=None, channel=None):
+        kwargs = {} if not kwargs else kwargs
         return self._broadcast(command, kwargs, destination,
                                reply=True, timeout=timeout,
                                callback=callback,
                                channel=channel)
 
-    def cast(self, destination, command, kwargs={}):
+    def cast(self, destination, command, kwargs=None):
+        kwargs = {} if not kwargs else kwargs
         return self._broadcast(command, kwargs, destination, reply=False)
 
-    def abcast(self, command, kwargs={}):
+    def abcast(self, command, kwargs=None):
+        kwargs = {} if not kwargs else kwargs
         return self._broadcast(command, kwargs, reply=False)
 
-    def multi_call(self, command, kwargs={}, timeout=1,
+    def multi_call(self, command, kwargs=None, timeout=1,
                    limit=None, callback=None, channel=None):
+        kwargs = {} if not kwargs else kwargs
         return self._broadcast(command, kwargs, reply=True,
                                timeout=timeout, limit=limit,
                                callback=callback,
@@ -261,7 +281,7 @@ class Mailbox(object):
                     reply, exchange=exchange, routing_key=routing_key,
                     declare=[exchange], headers={
                         'ticket': ticket, 'clock': self.clock.forward(),
-                    },
+                    }, retry=True,
                     **opts
                 )
             except InconsistencyError:
@@ -270,10 +290,12 @@ class Mailbox(object):
 
     def _publish(self, type, arguments, destination=None,
                  reply_ticket=None, channel=None, timeout=None,
-                 serializer=None, producer=None):
+                 serializer=None, producer=None, pattern=None, matcher=None):
         message = {'method': type,
                    'arguments': arguments,
-                   'destination': destination}
+                   'destination': destination,
+                   'pattern': pattern,
+                   'matcher': matcher}
         chan = channel or self.connection.default_channel
         exchange = self.exchange
         if reply_ticket:
@@ -287,17 +309,24 @@ class Mailbox(object):
                 message, exchange=exchange.name, declare=[exchange],
                 headers={'clock': self.clock.forward(),
                          'expires': time() + timeout if timeout else 0},
-                serializer=serializer,
+                serializer=serializer, retry=True,
             )
 
     def _broadcast(self, command, arguments=None, destination=None,
                    reply=False, timeout=1, limit=None,
-                   callback=None, channel=None, serializer=None):
+                   callback=None, channel=None, serializer=None,
+                   pattern=None, matcher=None):
         if destination is not None and \
                 not isinstance(destination, (list, tuple)):
             raise ValueError(
                 'destination must be a list/tuple not {0}'.format(
                     type(destination)))
+        if (pattern is not None and not isinstance(pattern, string_t) and
+                matcher is not None and not isinstance(matcher, string_t)):
+            raise ValueError(
+                'pattern and matcher must be '
+                'strings not {}, {}'.format(type(pattern), type(matcher))
+            )
 
         arguments = arguments or {}
         reply_ticket = reply and uuid() or None
@@ -312,7 +341,9 @@ class Mailbox(object):
                       reply_ticket=reply_ticket,
                       channel=chan,
                       timeout=timeout,
-                      serializer=serializer)
+                      serializer=serializer,
+                      pattern=pattern,
+                      matcher=matcher)
 
         if reply_ticket:
             return self._collect(reply_ticket, limit=limit,

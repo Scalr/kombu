@@ -21,7 +21,7 @@ try:
 except ImportError:  # pragma: no cover
     utc = None
 
-__all__ = ['Entry', 'Timer', 'to_timestamp']
+__all__ = ('Entry', 'Timer', 'to_timestamp')
 
 logger = get_logger(__name__)
 
@@ -108,13 +108,16 @@ class Timer(object):
     def __exit__(self, *exc_info):
         self.stop()
 
-    def call_at(self, eta, fun, args=(), kwargs={}, priority=0):
+    def call_at(self, eta, fun, args=(), kwargs=None, priority=0):
+        kwargs = {} if not kwargs else kwargs
         return self.enter_at(self.Entry(fun, args, kwargs), eta, priority)
 
-    def call_after(self, secs, fun, args=(), kwargs={}, priority=0):
+    def call_after(self, secs, fun, args=(), kwargs=None, priority=0):
+        kwargs = {} if not kwargs else kwargs
         return self.enter_after(secs, self.Entry(fun, args, kwargs), priority)
 
-    def call_repeatedly(self, secs, fun, args=(), kwargs={}, priority=0):
+    def call_repeatedly(self, secs, fun, args=(), kwargs=None, priority=0):
+        kwargs = {} if not kwargs else kwargs
         tref = self.Entry(fun, args, kwargs)
 
         @wraps(fun)
