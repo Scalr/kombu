@@ -22,7 +22,7 @@ from .five import reraise, text_t
 from .utils.compat import entrypoints
 from .utils.encoding import bytes_to_str, str_to_bytes, bytes_t
 
-__all__ = ['pickle', 'loads', 'dumps', 'register', 'unregister']
+__all__ = ('pickle', 'loads', 'dumps', 'register', 'unregister')
 SKIP_DECODE = frozenset(['binary', 'ascii-8bit'])
 TRUSTED_CONTENT = frozenset(['application/data', 'application/text'])
 
@@ -370,7 +370,7 @@ def register_msgpack():
                 return packb(s, use_bin_type=True)
 
             def unpack(s):
-                return unpackb(s, encoding='utf-8')
+                return unpackb(s, raw=False)
         else:
             def version_mismatch(*args, **kwargs):
                 raise SerializerNotInstalled(
@@ -410,8 +410,10 @@ _setupfuns = {
     'application/x-msgpack': register_msgpack,
 }
 
+NOTSET = object()
 
-def enable_insecure_serializers(choices=['pickle', 'yaml', 'msgpack']):
+
+def enable_insecure_serializers(choices=NOTSET):
     """Enable serializers that are considered to be unsafe.
 
     Note:
@@ -419,14 +421,16 @@ def enable_insecure_serializers(choices=['pickle', 'yaml', 'msgpack']):
         can also specify a list of serializers (by name or content type)
         to enable.
     """
-    for choice in choices:
-        try:
-            registry.enable(choice)
-        except KeyError:
-            pass
+    choices = ['pickle', 'yaml', 'msgpack'] if choices is NOTSET else choices
+    if choices is not None:
+        for choice in choices:
+            try:
+                registry.enable(choice)
+            except KeyError:
+                pass
 
 
-def disable_insecure_serializers(allowed=['json']):
+def disable_insecure_serializers(allowed=NOTSET):
     """Disable untrusted serializers.
 
     Will disable all serializers except ``json``
@@ -437,6 +441,7 @@ def disable_insecure_serializers(allowed=['json']):
         in these formats, but consumers will not accept
         incoming data using the untrusted content types.
     """
+    allowed = ['json'] if allowed is NOTSET else allowed
     for name in registry._decoders:
         registry.disable(name)
     if allowed is not None:
@@ -452,7 +457,8 @@ for ep, args in entrypoints('kombu.serializers'):  # pragma: no cover
     register(ep.name, *args)
 
 
-def prepare_accept_content(l, name_to_type=registry.name_to_type):
-    if l is not None:
-        return {n if '/' in n else name_to_type[n] for n in l}
-    return l
+def prepare_accept_content(content_types, name_to_type=None):
+    name_to_type = registry.name_to_type if not name_to_type else name_to_type
+    if content_types is not None:
+        return {n if '/' in n else name_to_type[n] for n in content_types}
+    return content_types

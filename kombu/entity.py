@@ -13,7 +13,7 @@ PERSISTENT_DELIVERY_MODE = 2
 DELIVERY_MODES = {'transient': TRANSIENT_DELIVERY_MODE,
                   'persistent': PERSISTENT_DELIVERY_MODE}
 
-__all__ = ['Exchange', 'Queue', 'binding', 'maybe_delivery_mode']
+__all__ = ('Exchange', 'Queue', 'binding', 'maybe_delivery_mode')
 
 INTERNAL_EXCHANGE_PREFIX = ('amq.',)
 
@@ -30,8 +30,9 @@ def pretty_bindings(bindings):
 
 
 def maybe_delivery_mode(
-        v, modes=DELIVERY_MODES, default=PERSISTENT_DELIVERY_MODE):
+        v, modes=None, default=PERSISTENT_DELIVERY_MODE):
     """Get delivery mode by name (or none if undefined)."""
+    modes = DELIVERY_MODES if not modes else modes
     if v:
         return v if isinstance(v, numbers.Integral) else modes[v]
     return default
@@ -244,9 +245,11 @@ class Exchange(MaybeChannelBound):
 
             headers (Dict): Message headers.
         """
-        # XXX This method is unused by kombu itself AFAICT [ask].
         properties = {} if properties is None else properties
         properties['delivery_mode'] = maybe_delivery_mode(self.delivery_mode)
+        if (isinstance(body, string_t) and
+                properties.get('content_encoding', None)) is None:
+            kwargs['content_encoding'] = 'utf-8'
         return self.channel.prepare_message(
             body,
             properties=properties,
@@ -519,7 +522,7 @@ class Queue(MaybeChannelBound):
 
         alias (str): Unused in Kombu, but applications can take advantage
             of this,  for example to give alternate names to queues with
-            utomatically generated queue names.
+            automatically generated queue names.
 
         on_declared (Callable): Optional callback to be applied when the
             queue has been declared (the ``queue_declare`` operation is
@@ -568,7 +571,10 @@ class Queue(MaybeChannelBound):
                  **kwargs):
         super(Queue, self).__init__(**kwargs)
         self.name = name or self.name
-        self.exchange = exchange or self.exchange
+        if isinstance(exchange, str):
+            self.exchange = Exchange(exchange)
+        elif isinstance(exchange, Exchange):
+            self.exchange = exchange
         self.routing_key = routing_key or self.routing_key
         self.bindings = set(bindings or [])
         self.on_declared = on_declared
@@ -804,7 +810,11 @@ class Queue(MaybeChannelBound):
 
     @property
     def can_cache_declaration(self):
-        return not self.auto_delete
+        if self.queue_arguments:
+            expiring_queue = "x-expires" in self.queue_arguments
+        else:
+            expiring_queue = False
+        return not expiring_queue and not self.auto_delete
 
     @classmethod
     def from_dict(cls, queue, **options):

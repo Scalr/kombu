@@ -11,7 +11,7 @@ from functools import partial
 from itertools import count
 from uuid import uuid5, uuid4, uuid3, NAMESPACE_OID
 
-from amqp import RecoverableConnectionError
+from amqp import ChannelError, RecoverableConnectionError
 
 from .entity import Exchange, Queue
 from .five import bytes_if_py2, range
@@ -27,10 +27,10 @@ except ImportError:                             # pragma: no cover
     except ImportError:                         # pragma: no cover
         from dummy_thread import get_ident      # noqa
 
-__all__ = ['Broadcast', 'maybe_declare', 'uuid',
+__all__ = ('Broadcast', 'maybe_declare', 'uuid',
            'itermessages', 'send_reply',
            'collect_replies', 'insured', 'drain_consumer',
-           'eventloop']
+           'eventloop')
 
 #: Prefetch count can't exceed short.
 PREFETCH_COUNT_MAX = 0xFFFF
@@ -79,16 +79,27 @@ class Broadcast(Queue):
         queue (str): By default a unique id is used for the queue
             name for every consumer.  You can specify a custom
             queue name here.
+        unique (bool): Always create a unique queue
+            even if a queue name is supplied.
         **kwargs (Any): See :class:`~kombu.Queue` for a list
             of additional keyword arguments supported.
     """
 
     attrs = Queue.attrs + (('queue', None),)
 
-    def __init__(self, name=None, queue=None, auto_delete=True,
-                 exchange=None, alias=None, **kwargs):
-        queue = queue or 'bcast.{0}'.format(uuid())
-        return super(Broadcast, self).__init__(
+    def __init__(self,
+                 name=None,
+                 queue=None,
+                 unique=False,
+                 auto_delete=True,
+                 exchange=None,
+                 alias=None,
+                 **kwargs):
+        if unique:
+            queue = '{0}.{1}'.format(queue or 'bcast', uuid())
+        else:
+            queue = queue or 'bcast.{0}'.format(uuid())
+        super(Broadcast, self).__init__(
             alias=alias or name,
             queue=queue,
             name=queue,
@@ -110,16 +121,32 @@ def maybe_declare(entity, channel=None, retry=False, **retry_policy):
     return _maybe_declare(entity, channel)
 
 
-def _maybe_declare(entity, channel):
+def _ensure_channel_is_bound(entity, channel):
+    """Make sure the channel is bound to the entity.
+
+    :param entity: generic kombu nomenclature, generally an exchange or queue
+    :param channel: channel to bind to the entity
+    :return: the updated entity
+    """
     is_bound = entity.is_bound
+    if not is_bound:
+        if not channel:
+            raise ChannelError(
+                "Cannot bind channel {} to entity {}".format(channel, entity))
+        entity = entity.bind(channel)
+        return entity
+
+
+def _maybe_declare(entity, channel):
+    # _maybe_declare sets name on original for autogen queues
     orig = entity
 
-    if not is_bound:
-        assert channel
-        entity = entity.bind(channel)
+    _ensure_channel_is_bound(entity, channel)
 
     if channel is None:
-        assert is_bound
+        if not entity.is_bound:
+            raise ChannelError(
+                "channel is None and entity {} not bound.".format(entity))
         channel = entity.channel
 
     declared = ident = None
@@ -140,8 +167,14 @@ def _maybe_declare(entity, channel):
 
 
 def _imaybe_declare(entity, channel, **retry_policy):
+    _ensure_channel_is_bound(entity, channel)
+
+    if not entity.channel.connection:
+        raise RecoverableConnectionError('channel disconnected')
+
     return entity.channel.connection.client.ensure(
         entity, _maybe_declare, **retry_policy)(entity, channel)
+
 
 def drain_consumer(consumer, limit=1, timeout=None, callbacks=None):
     """Drain messages from consumer instance."""
@@ -399,8 +432,8 @@ class QoS(object):
         if pcount != self.prev:
             new_value = pcount
             if pcount > PREFETCH_COUNT_MAX:
-                logger.warn('QoS: Disabled: prefetch_count exceeds %r',
-                            PREFETCH_COUNT_MAX)
+                logger.warning('QoS: Disabled: prefetch_count exceeds %r',
+                               PREFETCH_COUNT_MAX)
                 new_value = 0
             logger.debug('basic.qos: prefetch_count->%s', new_value)
             self.callback(prefetch_count=new_value)

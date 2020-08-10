@@ -3,7 +3,6 @@
 import os
 import re
 import sys
-import codecs
 
 import setuptools
 import setuptools.command.test
@@ -63,14 +62,13 @@ def fullsplit(path, result=None):
 for scheme in list(INSTALL_SCHEMES.values()):
     scheme['data'] = scheme['purelib']
 
-if os.path.exists('README.rst'):
-    long_description = codecs.open('README.rst', 'r', 'utf-8').read()
-else:
-    long_description = 'See https://pypi.python.org/pypi/kombu'
+# if os.path.exists('README.rst'):
+#    long_description = codecs.open('README.rst', 'r', 'utf-8').read()
+# else:
+#    long_description = 'See https://pypi.org/project/kombu/'
 
 # -*- Installation Requires -*-
 py_version = sys.version_info
-is_jython = sys.platform.startswith('java')
 is_pypy = hasattr(sys, 'pypy_version_info')
 
 
@@ -102,12 +100,16 @@ class pytest(setuptools.command.test.test):
         sys.exit(pytest.main(self.pytest_args))
 
 
+def readme():
+    with open('README.rst') as f:
+        return f.read()
+
+
 setup(
     name='kombu',
     packages=setuptools.find_packages(exclude=['t', 't.*']),
     version=meta['version'],
     description=meta['doc'],
-    long_description=long_description,
     keywords='messaging message amqp rabbitmq redis actor producer consumer',
     author=meta['author'],
     author_email=meta['contact'],
@@ -116,7 +118,7 @@ setup(
     zip_safe=False,
     license='BSD',
     cmdclass={'test': pytest},
-    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*",
+    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
     install_requires=reqs('default.txt'),
     tests_require=reqs('test.txt'),
     extras_require={
@@ -130,6 +132,8 @@ setup(
         'librabbitmq': extras('librabbitmq.txt'),
         'pyro': extras('pyro.txt'),
         'slmq': extras('slmq.txt'),
+        'azurestoragequeues': extras('azurestoragequeues.txt'),
+        'azureservicebus': extras('azureservicebus.txt'),
         'qpid': extras('qpid.txt'),
         'consul': extras('consul.txt'),
     },
@@ -139,14 +143,14 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
-        'Programming Language :: Python :: Implementation :: Jython',
         'Intended Audience :: Developers',
         'Topic :: Communications',
         'Topic :: System :: Distributed Computing',

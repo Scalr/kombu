@@ -13,7 +13,7 @@ from .utils.encoding import safe_repr, safe_str
 from .utils.functional import maybe_evaluate
 from .utils.objects import cached_property
 
-__all__ = ['LogMixin', 'LOG_LEVELS', 'get_loglevel', 'setup_logging']
+__all__ = ('LogMixin', 'LOG_LEVELS', 'get_loglevel', 'setup_logging')
 
 try:
     LOG_LEVELS = dict(logging._nameToLevel)
@@ -47,9 +47,8 @@ def naive_format_parts(fmt):
         yield None if not e or not parts[i - 1] else e[0]
 
 
-def safeify_format(fmt, args,
-                   filters={'s': safe_str,
-                            'r': safe_repr}):
+def safeify_format(fmt, args, filters=None):
+    filters = {'s': safe_str, 'r': safe_repr} if not filters else filters
     for index, type in enumerate(naive_format_parts(fmt)):
         filt = filters.get(type)
         yield filt(args[index]) if filt else args[index]
@@ -68,21 +67,19 @@ class LogMixin(object):
         return self.log(logging.WARN, *args, **kwargs)
 
     def error(self, *args, **kwargs):
-        return self._error(logging.ERROR, *args, **kwargs)
+        kwargs.setdefault('exc_info', True)
+        return self.log(logging.ERROR, *args, **kwargs)
 
     def critical(self, *args, **kwargs):
-        return self._error(logging.CRITICAL, *args, **kwargs)
-
-    def _error(self, severity, *args, **kwargs):
         kwargs.setdefault('exc_info', True)
-        if DISABLE_TRACEBACKS:
-            kwargs.pop('exc_info', None)
-        return self.log(severity, *args, **kwargs)
+        return self.log(logging.CRITICAL, *args, **kwargs)
 
     def annotate(self, text):
         return '%s - %s' % (self.logger_name, text)
 
     def log(self, severity, *args, **kwargs):
+        if DISABLE_TRACEBACKS:
+            kwargs.pop('exc_info', None)
         if self.logger.isEnabledFor(severity):
             log = self.logger.log
             if len(args) > 1 and isinstance(args[0], string_t):

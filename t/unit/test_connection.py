@@ -30,6 +30,8 @@ class test_connection_utils:
             'port': 5672,
             'virtual_host': 'my/vhost',
         }
+        self.pg_url = 'sqla+postgresql://test:password@yms-pg/yms'
+        self.pg_nopass = 'sqla+postgresql://test:**@yms-pg/yms'
 
     def test_parse_url(self):
         result = parse_url(self.url)
@@ -115,6 +117,12 @@ class test_connection_utils:
         clone = deepcopy(conn)
         assert clone.alt == ['amqp://host']
 
+    @skip.unless_module('sqlalchemy')
+    def test_parse_generated_as_uri_pg(self):
+        conn = Connection(self.pg_url)
+        assert conn.as_uri() == self.pg_nopass
+        assert conn.as_uri(include_password=True) == self.pg_url
+
 
 class test_Connection:
 
@@ -123,7 +131,9 @@ class test_Connection:
 
     def test_establish_connection(self):
         conn = self.conn
+        assert not conn.connected
         conn.connect()
+        assert conn.connected
         assert conn.connection.connected
         assert conn.host == 'localhost:5672'
         channel = conn.channel()
@@ -133,6 +143,40 @@ class test_Connection:
         conn.close()
         assert not _connection.connected
         assert isinstance(conn.transport, Transport)
+
+    def test_reuse_connection(self):
+        conn = self.conn
+        assert conn.connect() is conn.connection is conn.connect()
+
+    def test_connect_no_transport_options(self):
+        conn = self.conn
+        conn._ensure_connection = Mock()
+
+        conn.connect()
+        # ensure_connection must be called to return immidiately
+        # and fail with transport exception
+        conn._ensure_connection.assert_called_with(
+            max_retries=1, reraise_as_library_errors=False
+        )
+
+    def test_connect_transport_options(self):
+        conn = self.conn
+        conn.transport_options = {
+            'max_retries': 1,
+            'interval_start': 2,
+            'interval_step': 3,
+            'interval_max': 4,
+            'ignore_this': True
+        }
+        conn._ensure_connection = Mock()
+
+        conn.connect()
+        # connect() is ignoring transport options
+        # ensure_connection must be called to return immidiately
+        # and fail with transport exception
+        conn._ensure_connection.assert_called_with(
+            max_retries=1, reraise_as_library_errors=False
+        )
 
     def test_multiple_urls(self):
         conn1 = Connection('amqp://foo;amqp://bar')
@@ -158,6 +202,20 @@ class test_Connection:
         assert trans.client is None
         assert connection._transport is None
         assert connection._connection is None
+
+    def test_prefer_librabbitmq_over_amqp_when_available(self):
+        with patch('kombu.connection.supports_librabbitmq',
+                   return_value=True):
+            connection = Connection('amqp://')
+
+        assert connection.transport_cls == 'librabbitmq'
+
+    def test_select_amqp_when_librabbitmq_is_not_available(self):
+        with patch('kombu.connection.supports_librabbitmq',
+                   return_value=False):
+            connection = Connection('amqp://')
+
+        assert connection.transport_cls == 'amqp'
 
     def test_collect_no_transport(self):
         connection = Connection('memory://')
@@ -203,12 +261,6 @@ class test_Connection:
                 assert c.hostname == 'mysql://some_host'
         c = Connection('pyamqp+sqlite://some_host')
         assert c.as_uri().startswith('pyamqp+')
-
-    def test_default_ensure_callback(self):
-        with patch('kombu.connection.logger') as logger:
-            c = Connection(transport=Mock)
-            c._default_ensure_callback(KeyError(), 3)
-            logger.error.assert_called()
 
     def test_ensure_connection_on_error(self):
         c = Connection('amqp://A;amqp://B')
@@ -291,6 +343,16 @@ class test_Connection:
         assert c.hostname == 'foo'
         assert c.transport_cls, ('librabbitmq', 'pyamqp' in 'amqp')
 
+    def test_switch_without_uri_identifier(self):
+        c = Connection('amqp://foo')
+        assert c.hostname == 'foo'
+        assert c.transport_cls, ('librabbitmq', 'pyamqp' in 'amqp')
+        c._closed = True
+        c.switch('example.com')
+        assert not c._closed
+        assert c.hostname == 'example.com'
+        assert c.transport_cls, ('librabbitmq', 'pyamqp' in 'amqp')
+
     def test_heartbeat_check(self):
         c = Connection(transport=Transport)
         c.transport.heartbeat_check = Mock()
@@ -357,6 +419,18 @@ class test_Connection:
         conn._close()
         conn._default_channel.close.assert_called_with()
 
+    def test_auto_reconnect_default_channel(self):
+        # tests GH issue: #1208
+        # Tests that default_channel automatically reconnects when connection
+        # closed
+        c = Connection('memory://')
+        c._closed = True
+        with patch.object(
+            c, '_connection_factory', side_effect=c._connection_factory
+        ) as cf_mock:
+            c.default_channel
+            cf_mock.assert_called_once_with()
+
     def test_close_when_default_channel_close_raises(self):
 
         class Conn(Connection):
@@ -379,32 +453,6 @@ class test_Connection:
 
         defchan.close.assert_called_with()
         assert conn._default_channel is None
-
-    def test_default_channel_no_transport_options(self):
-        conn = self.conn
-        conn.ensure_connection = Mock()
-
-        assert conn.default_channel
-        conn.ensure_connection.assert_called_with()
-
-    def test_default_channel_transport_options(self):
-        conn = self.conn
-        conn.transport_options = options = {
-            'max_retries': 1,
-            'interval_start': 2,
-            'interval_step': 3,
-            'interval_max': 4,
-            'ignore_this': True
-        }
-        conn.ensure_connection = Mock()
-
-        assert conn.default_channel
-        conn.ensure_connection.assert_called_with(**{
-            k: v for k, v in options.items()
-            if k in ['max_retries',
-                     'interval_start',
-                     'interval_step',
-                     'interval_max']})
 
     def test_ensure_connection(self):
         assert self.conn.ensure_connection()
@@ -470,6 +518,37 @@ class test_Connection:
         q2 = conn.SimpleBuffer('foo', channel=chan)
         assert q2.channel is chan
 
+    def test_SimpleQueue_with_parameters(self):
+        conn = self.conn
+        q = conn.SimpleQueue(
+            'foo', True, {'durable': True}, {'x-queue-mode': 'lazy'},
+            {'durable': True, 'type': 'fanout', 'delivery_mode': 'persistent'})
+
+        assert q.queue.exchange.type == 'fanout'
+        assert q.queue.exchange.durable
+        assert not q.queue.exchange.auto_delete
+        delivery_mode_code = q.queue.exchange.PERSISTENT_DELIVERY_MODE
+        assert q.queue.exchange.delivery_mode == delivery_mode_code
+
+        assert q.queue.queue_arguments['x-queue-mode'] == 'lazy'
+
+        assert q.queue.durable
+        assert not q.queue.auto_delete
+
+    def test_SimpleBuffer_with_parameters(self):
+        conn = self.conn
+        q = conn.SimpleBuffer(
+            'foo', True, {'durable': True}, {'x-queue-mode': 'lazy'},
+            {'durable': True, 'type': 'fanout', 'delivery_mode': 'persistent'})
+        assert q.queue.exchange.type == 'fanout'
+        assert q.queue.exchange.durable
+        assert q.queue.exchange.auto_delete
+        delivery_mode_code = q.queue.exchange.PERSISTENT_DELIVERY_MODE
+        assert q.queue.exchange.delivery_mode == delivery_mode_code
+        assert q.queue.queue_arguments['x-queue-mode'] == 'lazy'
+        assert q.queue.durable
+        assert q.queue.auto_delete
+
     def test_Producer(self):
         conn = self.conn
         assert isinstance(conn.Producer(), Producer)
@@ -504,6 +583,14 @@ class test_Connection:
 
         conn = Connection(transport=MyTransport)
         assert conn.connection_errors == (KeyError, ValueError)
+
+    def test_multiple_urls_hostname(self):
+        conn = Connection(['example.com;amqp://example.com'])
+        assert conn.as_uri() == 'amqp://guest:**@example.com:5672//'
+        conn = Connection(['example.com', 'amqp://example.com'])
+        assert conn.as_uri() == 'amqp://guest:**@example.com:5672//'
+        conn = Connection('example.com;example.com;')
+        assert conn.as_uri() == 'amqp://guest:**@example.com:5672//'
 
 
 class test_Connection_with_transport_options:
