@@ -129,6 +129,7 @@ class Message:
         except BrokenPipeError as exc:
             logger.critical("Couldn't ack %r, reason:%r",
                             self.delivery_tag, exc, exc_info=True)
+            # re-raise this error to allow a consumer to reconnect
             raise
         except errors as exc:
             logger.critical("Couldn't ack %r, reason:%r",
