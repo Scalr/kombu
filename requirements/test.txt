@@ -1,4 +1,4 @@
-pytz>dev
+pytz>0.dev.0
 case>=1.5.2
 pytest<=5.3.5
 pytest-sugar
