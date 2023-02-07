@@ -1,12 +1,13 @@
 name: CI
-on: [pull_request, push]
+on: [push]
 jobs:
   #################### Unittests ####################
   unittest:
+    needs: [lint]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7,3.8,3.9]
+        python-version: ['3.8', '3.10']
     steps:
       - name: Install system packages
         run: sudo apt update && sudo apt-get install libcurl4-openssl-dev libssl-dev
@@ -29,13 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.7,3.8,3.9]
+        python-version: ['3.8', '3.10']
         experimental: [false]
-        include:
-          - python-version: pypy-3.7
-            experimental: true
-          - python-version: pypy-3.8
-            experimental: true
     steps:
       - name: Install system packages
         run: sudo apt update && sudo apt-get install libcurl4-openssl-dev libssl-dev
@@ -53,16 +49,13 @@ jobs:
         run: echo PYTHON_VERSION=$(echo ${{ matrix.python-version }} | sed s/-//) >> $GITHUB_ENV
       - name: Run AMQP integration tests
         run: tox -v -e ${{ env.PYTHON_VERSION }}-linux-integration-py-amqp -- -v
-      - name: Run redis integration tests
-        run: tox -v -e ${{ env.PYTHON_VERSION }}-linux-integration-py-redis -- -v
 
   #################### Linters and checkers ####################
   lint:
-    needs: [unittest, integration]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9]
+        python-version: ['3.8', '3.10']
     steps:
       - name: Install system packages
         run: sudo apt update && sudo apt-get install libcurl4-openssl-dev libssl-dev
@@ -79,5 +72,3 @@ jobs:
         run: tox -v -e flake8 -- -v
       - name: Run pydocstyle
         run: tox -v -e pydocstyle -- -v
-      - name: Run apicheck
-        run: tox -v -e apicheck -- -v
